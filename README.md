@@ -10,6 +10,8 @@ O trabalho tem como objetivo aplicar e comparar modelos de Machine Learning para
 
 Foi utilizada a base de dados *Give Me Some Credit*, disponibilizada na plataforma Kaggle.
 
+https://www.kaggle.com/competitions/GiveMeSomeCredit
+
 A variável-alvo utilizada foi `SeriousDlqin2yrs`, que indica a ocorrência de inadimplência.
 
 ## Metodologia
@@ -38,7 +40,7 @@ Os modelos foram avaliados utilizando:
 
 ## Arquivo principal
 
-`tcc.py` — contém o código utilizado para o desenvolvimento e avaliação dos modelos apresentados no TCC.
+`analise_inadimplencia.py` — contém o código utilizado para o tratamento dos dados, treinamento e avaliação dos modelos apresentados no TCC.
 
 ## Tecnologias utilizadas
 
@@ -48,6 +50,16 @@ Os modelos foram avaliados utilizando:
 - Scikit-learn
 - Imbalanced-learn
 - Matplotlib
+
+## Como executar
+
+1. Baixe a base de dados *Give Me Some Credit*, disponibilizada na plataforma Kaggle.
+2. Extraia o arquivo `cs-training.csv`.
+3. Coloque o arquivo `cs-training.csv` na mesma pasta do arquivo `analise_inadimplencia.py`.
+4. Instale as bibliotecas indicadas no arquivo `requirements.txt`.
+5. Execute o arquivo `analise_inadimplencia.py`.
+
+O código realiza o tratamento e preparação dos dados, treinamento dos modelos, aplicação do SMOTE e avaliação dos resultados.
 
 ## Autora
 

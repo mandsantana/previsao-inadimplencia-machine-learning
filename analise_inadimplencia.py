@@ -32,6 +32,8 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay,
     RocCurveDisplay
 )
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from imblearn.pipeline import Pipeline
 
 # ============================================================
 # 2. CARREGAMENTO DA BASE
@@ -224,6 +226,95 @@ X_test_scaled = scaler.transform(X_test)
 print("\n--- PADRONIZAÇÃO CONCLUÍDA ---")
 print("Treino padronizado:", X_train_scaled.shape)
 print("Teste padronizado:", X_test_scaled.shape)
+
+
+# ============================================================
+# 8B. VALIDAÇÃO CRUZADA - AJUSTE DE HIPERPARÂMETROS
+# ============================================================
+
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+# --- Regressão Logística sem SMOTE ---
+param_grid_log = {"C": [0.01, 0.1, 1, 10, 100]}
+
+grid_log = GridSearchCV(
+    LogisticRegression(max_iter=1000, random_state=42),
+    param_grid_log,
+    scoring="roc_auc",
+    cv=cv,
+    n_jobs=-1
+)
+grid_log.fit(X_train_scaled, y_train)
+
+print("\n--- GRID: REGRESSÃO LOGÍSTICA (sem SMOTE) ---")
+print("Melhor C:", grid_log.best_params_["C"])
+print("Melhor AUC-ROC na validação cruzada:", round(grid_log.best_score_, 5))
+
+# --- Regressão Logística + SMOTE ---
+pipeline_log_smote = Pipeline([
+    ("smote", SMOTE(random_state=42)),
+    ("logistica", LogisticRegression(max_iter=1000, random_state=42))
+])
+
+param_grid_log_smote = {"logistica__C": [0.01, 0.1, 1, 10, 100]}
+
+grid_log_smote = GridSearchCV(
+    pipeline_log_smote,
+    param_grid_log_smote,
+    scoring="roc_auc",
+    cv=cv,
+    n_jobs=-1
+)
+grid_log_smote.fit(X_train_scaled, y_train)
+
+print("\n--- GRID: REGRESSÃO LOGÍSTICA + SMOTE ---")
+print("Melhor C:", grid_log_smote.best_params_["logistica__C"])
+print("Melhor AUC-ROC na validação cruzada:", round(grid_log_smote.best_score_, 5))
+
+# --- Random Forest sem SMOTE ---
+param_grid_rf = {
+    "n_estimators": [100, 200],
+    "max_depth": [10, 20, None],
+    "min_samples_split": [2, 5]
+}
+
+grid_rf = GridSearchCV(
+    RandomForestClassifier(random_state=42, n_jobs=-1),
+    param_grid_rf,
+    scoring="roc_auc",
+    cv=cv,
+    n_jobs=-1
+)
+grid_rf.fit(X_train, y_train)
+
+print("\n--- GRID: RANDOM FOREST (sem SMOTE) ---")
+print("Melhores hiperparâmetros:", grid_rf.best_params_)
+print("Melhor AUC-ROC na validação cruzada:", round(grid_rf.best_score_, 5))
+
+# --- Random Forest + SMOTE ---
+pipeline_rf_smote = Pipeline([
+    ("smote", SMOTE(random_state=42)),
+    ("rf", RandomForestClassifier(random_state=42, n_jobs=-1))
+])
+
+param_grid_rf_smote = {
+    "rf__n_estimators": [100, 200],
+    "rf__max_depth": [10, 20, None],
+    "rf__min_samples_split": [2, 5]
+}
+
+grid_rf_smote = GridSearchCV(
+    pipeline_rf_smote,
+    param_grid_rf_smote,
+    scoring="roc_auc",
+    cv=cv,
+    n_jobs=-1
+)
+grid_rf_smote.fit(X_train, y_train)
+
+print("\n--- GRID: RANDOM FOREST + SMOTE ---")
+print("Melhores hiperparâmetros:", grid_rf_smote.best_params_)
+print("Melhor AUC-ROC na validação cruzada:", round(grid_rf_smote.best_score_, 5))
 
 # ============================================================
 # 9. REGRESSÃO LOGÍSTICA - SEM SMOTE

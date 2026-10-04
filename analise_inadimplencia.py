@@ -21,6 +21,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import average_precision_score
 
 from sklearn.metrics import (
     accuracy_score,
@@ -189,6 +190,7 @@ for coluna in colunas_capping:
     
     print(f"{coluna}: {limite_p99}")
     
+    
     # Aplicar o limite no treino
     X_train[coluna] = X_train[coluna].clip(
         upper=limite_p99
@@ -227,14 +229,56 @@ print("\n--- PADRONIZAÇÃO CONCLUÍDA ---")
 print("Treino padronizado:", X_train_scaled.shape)
 print("Teste padronizado:", X_test_scaled.shape)
 
+# ============================================================
+# 8B. ANÁLISE DE CORRELAÇÃO
+# ============================================================
+
+dados_correlacao = X_train.copy()
+dados_correlacao["SeriousDlqin2yrs"] = y_train
+
+matriz_correlacao = dados_correlacao.corr()
+
+print("\n--- CORRELAÇÃO COM A VARIÁVEL ALVO ---")
+print(
+    matriz_correlacao["SeriousDlqin2yrs"]
+    .sort_values(ascending=False)
+)
+
+plt.figure(figsize=(10, 8))
+
+plt.imshow(
+    matriz_correlacao,
+    cmap="coolwarm",
+    vmin=-1,
+    vmax=1
+)
+
+plt.colorbar(label="Correlação")
+
+plt.xticks(
+    range(len(matriz_correlacao.columns)),
+    matriz_correlacao.columns,
+    rotation=90
+)
+
+plt.yticks(
+    range(len(matriz_correlacao.columns)),
+    matriz_correlacao.columns
+)
+
+plt.title("Matriz de Correlação - Conjunto de Treinamento")
+plt.tight_layout()
+plt.show()
+
 
 # ============================================================
-# 8B. VALIDAÇÃO CRUZADA - AJUSTE DE HIPERPARÂMETROS
+# 8C. VALIDAÇÃO CRUZADA - AJUSTE DE HIPERPARÂMETROS
 # ============================================================
 
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
 # --- Regressão Logística sem SMOTE ---
+
 param_grid_log = {"C": [0.01, 0.1, 1, 10, 100]}
 
 grid_log = GridSearchCV(
@@ -244,11 +288,15 @@ grid_log = GridSearchCV(
     cv=cv,
     n_jobs=-1
 )
+
 grid_log.fit(X_train_scaled, y_train)
 
 print("\n--- GRID: REGRESSÃO LOGÍSTICA (sem SMOTE) ---")
 print("Melhor C:", grid_log.best_params_["C"])
-print("Melhor AUC-ROC na validação cruzada:", round(grid_log.best_score_, 5))
+print(
+    "Melhor AUC-ROC na validação cruzada:",
+    round(grid_log.best_score_, 5)
+)
 
 # --- Regressão Logística + SMOTE ---
 pipeline_log_smote = Pipeline([
@@ -525,6 +573,52 @@ print(y_train_smote_rf.value_counts())
 
 
 # ============================================================
+# 16B. VERIFICAÇÃO DAS OBSERVAÇÕES SINTÉTICAS GERADAS PELO SMOTE
+# ============================================================
+
+# Separar apenas as observações sintéticas criadas pelo SMOTE
+X_sintetico = X_train_smote_rf.iloc[len(X_train):].copy()
+
+print("\n--- VERIFICAÇÃO DAS OBSERVAÇÕES SINTÉTICAS ---")
+print("Quantidade de observações sintéticas:", len(X_sintetico))
+
+# Verificar presença de valores negativos
+print("\n--- VALORES NEGATIVOS NAS OBSERVAÇÕES SINTÉTICAS ---")
+print((X_sintetico < 0).sum())
+
+# Variáveis de contagem
+variaveis_contagem = [
+    "NumberOfTime30-59DaysPastDueNotWorse",
+    "NumberOfOpenCreditLinesAndLoans",
+    "NumberOfTimes90DaysLate",
+    "NumberRealEstateLoansOrLines",
+    "NumberOfTime60-89DaysPastDueNotWorse",
+    "NumberOfDependents"
+]
+
+print("\n--- MÍNIMO E MÁXIMO DAS VARIÁVEIS DE CONTAGEM ---")
+print(X_sintetico[variaveis_contagem].agg(["min", "max"]))
+
+print("\n--- VALORES FRACIONÁRIOS NAS VARIÁVEIS DE CONTAGEM ---")
+
+for coluna in variaveis_contagem:
+
+    quantidade_fracionarios = (
+        X_sintetico[coluna] % 1 != 0
+    ).sum()
+
+    percentual_fracionarios = (
+        quantidade_fracionarios / len(X_sintetico) * 100
+    )
+
+    print(
+        coluna,
+        ":",
+        quantidade_fracionarios,
+        f"({percentual_fracionarios:.2f}%)"
+    )
+
+# ============================================================
 # 17. RANDOM FOREST + SMOTE
 # ============================================================
 
@@ -592,8 +686,40 @@ print(
     )
 )
 
+
 # ============================================================
-# 19. TABELA COMPARATIVA DOS MODELOS
+# 19. AVERAGE PRECISION
+# ============================================================
+
+ap_log = average_precision_score(
+    y_test,
+    y_prob_log
+)
+
+ap_log_smote = average_precision_score(
+    y_test,
+    y_prob_log_smote
+)
+
+ap_rf = average_precision_score(
+    y_test,
+    y_prob_rf
+)
+
+ap_rf_smote = average_precision_score(
+    y_test,
+    y_prob_rf_smote
+)
+
+print("\n--- AVERAGE PRECISION ---")
+print("Regressão Logística:", round(ap_log, 5))
+print("Regressão Logística + SMOTE:", round(ap_log_smote, 5))
+print("Random Forest:", round(ap_rf, 5))
+print("Random Forest + SMOTE:", round(ap_rf_smote, 5))
+
+
+# ============================================================
+# 20. TABELA COMPARATIVA DOS MODELOS
 # ============================================================
 
 resultados = pd.DataFrame({
@@ -632,7 +758,13 @@ resultados = pd.DataFrame({
         auc_log_smote,
         auc_rf,
         auc_rf_smote
-    ]
+    ],
+    "Average Precision": [
+    ap_log,
+    ap_log_smote,
+    ap_rf,
+    ap_rf_smote
+]
 })
 
 print("\n--- COMPARAÇÃO DOS MODELOS ---")
@@ -640,7 +772,7 @@ print(resultados.round(5).to_string(index=False))
 
 
 # ============================================================
-# 20. DISTRIBUIÇÃO DA VARIÁVEL ALVO - BASE ORIGINAL
+# 21. DISTRIBUIÇÃO DA VARIÁVEL ALVO - BASE ORIGINAL
 # ============================================================
 
 plt.figure(figsize=(7, 5))
@@ -668,7 +800,7 @@ plt.show()
 
 
 # ============================================================
-# 21. DISTRIBUIÇÃO DA VARIÁVEL ALVO - BASE APÓS TRATAMENTO
+# 22. DISTRIBUIÇÃO DA VARIÁVEL ALVO - BASE APÓS TRATAMENTO
 # ============================================================
 
 contagem_target_tratada = (
@@ -703,7 +835,7 @@ plt.show()
 
 
 # ============================================================
-# 22. MATRIZES DE CONFUSÃO
+# 23. MATRIZES DE CONFUSÃO
 # ============================================================
 
 modelos_matriz = {
@@ -726,7 +858,7 @@ for nome, previsoes in modelos_matriz.items():
 
 
 # ============================================================
-# 23. CURVAS ROC
+# 24. CURVAS ROC
 # ============================================================
 
 plt.figure(figsize=(8, 6))
@@ -764,7 +896,7 @@ plt.show()
 
 
 # ============================================================
-# 24. ANÁLISE DE LIMIARES - REGRESSÃO LOGÍSTICA
+# 25. ANÁLISE DE LIMIARES - REGRESSÃO LOGÍSTICA
 # ============================================================
 
 limiares = [0.30, 0.40, 0.50, 0.60, 0.70]
@@ -834,7 +966,7 @@ print(tabela_limiares.round(4).to_string(index=False))
 
 
 # ============================================================
-# 25. FINALIZAÇÃO
+# 26. FINALIZAÇÃO
 # ============================================================
 
 print("\n========================================")
